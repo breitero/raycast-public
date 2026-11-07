@@ -1,0 +1,12 @@
+{
+  "name": "rechnung-ueberweisen",
+  "title": "Rechnung überweisen",
+  "description": "Zahlungsdaten lokal aus einer im Finder ausgewählten PDF-Rechnung erkennen und prüfen",
+  "icon": "transfer-icon.png",
+  "author": "local",
+  "license": "MIT",
+  "commands": [{"name":"rechnung-ueberweisen","title":"Rechnung überweisen","subtitle":"PDF im Finder analysieren","description":"Erkennt Zahlungsdaten aus einer markierten PDF-Rechnung","mode":"view"}],
+  "scripts": {"dev":"ray develop","build":"ray build","lint":"ray lint"},
+  "dependencies": {"@raycast/api":"^1.100.0","@raycast/utils":"^1.17.0"},
+  "devDependencies": {"@types/node":"^22.0.0","@types/react":"^19.0.0","typescript":"^5.0.0"}
+}
