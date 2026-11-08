@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -77,7 +77,11 @@ function AlternativePicker({
   );
 }
 
-export default function Command() {
+export function InvoiceForm({ sourceFilePath, sourceFilename, deleteOnUnmount = false }: {
+  sourceFilePath?: string;
+  sourceFilename?: string;
+  deleteOnUnmount?: boolean;
+}) {
   const [invoice, setInvoice] = useState<Invoice>();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -91,6 +95,18 @@ export default function Command() {
   const [pdfPassword, setPdfPassword] = useState("");
   const [savePassword, setSavePassword] = useState(true);
   const [passwordRejected, setPasswordRejected] = useState(false);
+
+  // Nur von dieser Extension erzeugte Paperless-Tempdateien löschen.
+  // Niemals Finder-PDFs anfassen. Nicht beim Unmount löschen: Raycast kann
+  // während eines laufenden Swift-Aufrufs die View kurz neu aufbauen.
+  async function cleanupPaperlessPdf(filePath: string) {
+    if (!deleteOnUnmount || !sourceFilePath || filePath !== sourceFilePath) return;
+    const directory = path.dirname(filePath);
+    if (path.dirname(directory) !== os.tmpdir() ||
+        !path.basename(directory).startsWith("raycast-paperless-") ||
+        !/^paperless-\d+\.pdf$/.test(path.basename(filePath))) return;
+    await rm(directory, { recursive: true, force: true }).catch(() => {});
+  }
 
   async function extractPdf(filePath: string, password?: string, remember = false) {
     setLoading(true);
@@ -123,8 +139,12 @@ export default function Command() {
       setNeedsPassword(false);
       setPasswordRejected(false);
       setPdfPassword("");
+      // PDF wird nach erfolgreicher Swift-Auswertung nicht mehr benötigt.
+      // Bei Passwortabfrage bleibt sie bis zum erfolgreichen Entsperren erhalten.
+      await cleanupPaperlessPdf(filePath);
       if (!data.iban.length) await showToast({ style: Toast.Style.Failure, title: "Keine gültige IBAN erkannt", message: "Bitte manuell ergänzen." });
     } catch (error) {
+      await cleanupPaperlessPdf(filePath);
       await showToast({ style: Toast.Style.Failure, title: "PDF konnte nicht verarbeitet werden", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
@@ -135,13 +155,16 @@ export default function Command() {
     let active = true;
     async function load() {
       try {
-        const selected = await getSelectedFinderItems();
-        const pdf = selected.find((item) => item.path.toLowerCase().endsWith(".pdf"));
-        if (!pdf) throw new Error("Bitte zuerst eine PDF-Datei im Finder markieren.");
+        let pdfPathToRead = sourceFilePath;
+        if (!pdfPathToRead) {
+          const selected = await getSelectedFinderItems();
+          pdfPathToRead = selected.find((item) => item.path.toLowerCase().endsWith(".pdf"))?.path;
+        }
+        if (!pdfPathToRead) throw new Error("Bitte zuerst eine PDF-Datei im Finder markieren.");
         if (!active) return;
-        setPdfPath(pdf.path);
-        setFilename(path.basename(pdf.path));
-        await extractPdf(pdf.path);
+        setPdfPath(pdfPathToRead);
+        setFilename(sourceFilename || path.basename(pdfPathToRead));
+        await extractPdf(pdfPathToRead);
       } catch (error) {
         if (active) {
           setLoading(false);
@@ -150,8 +173,11 @@ export default function Command() {
       }
     }
     void load();
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+      // Kein Unmount-Cleanup: könnte laufenden Swift-Aufruf unterbrechen.
+    };
+  }, [sourceFilePath, sourceFilename, deleteOnUnmount]);
 
   function paymentText(): string {
     return [
@@ -273,4 +299,8 @@ export default function Command() {
       </>}
     </Form>
   );
+}
+
+export default function Command() {
+  return <InvoiceForm />;
 }
