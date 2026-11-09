@@ -2,7 +2,7 @@
 
 All notable changes to this Raycast extension are documented here.
 
-## [0.8.0] — 2026-11-09 (proposed)
+## [0.8.0] — 2026-11-09
 
 ### Added
 
