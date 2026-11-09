@@ -1,33 +1,32 @@
 # Rechnung überweisen — Raycast extension
 
-A macOS Raycast extension that reads payment details from PDF invoices selected in Finder or retrieved from **Paperless-ngx**, and prepares a **prefilled SEPA transfer in simplebanking / simplesend**. It does not submit or authorize payments.
+A macOS Raycast extension that extracts payment details from PDF invoices selected in **Finder**, retrieved from **Paperless-ngx**, or selected as attachments in **Apple Mail**. It prepares a **prefilled SEPA transfer draft in simplebanking / simplesend**. It does **not** submit or authorize payments.
 
 > **Language:** The Raycast interface is currently in German. This README is in English for contributors.
 
-## What's New in v0.7.0
+## What's new in v0.8.0
 
-Version 0.7.0 adds optional **Paperless-ngx integration**.
+- **Apple Mail integration:** Browse PDF attachments from the combined inbox across configured Mail accounts, with one entry per PDF attachment.
+- **Faster initial Mail listing:** Scan the latest 30 messages first; load 100 more messages on demand. Actual speed depends on the mailbox and device.
+- **Precise attachment selection:** Identify the account, mailbox, message, and attachment position; re-check the attachment filename before saving.
+- **Safer local processing:** Validate temporary PDF files and remove extension-created temporary files after processing, with cleanup of older interrupted downloads.
+- **Improved amount recognition:** Recognize common EUR formats such as `267,40 €`, `267,40 EUR`, and `EUR 267,40`; prioritize payment totals over incidental amounts.
+- **Regression-tested workflows:** Finder, Paperless-ngx, and Apple Mail all use the same editable invoice review form.
 
-- Search invoices stored in your self-hosted Paperless-ngx instance directly from Raycast.
-- Automatically filter documents by the Paperless document type `Rechnung`.
-- Configure the Paperless server URL and API token in Raycast preferences.
-- Download selected PDFs temporarily and process them using the existing invoice extraction workflow.
-- Review and edit the extracted payment details before sending them to simplesend.
-- Clean up temporary PDF files after processing, with additional cleanup for older files.
-- Updated extension icon.
-
-The original Finder-based workflow remains available without Paperless-ngx.
+Version 0.7.0 introduced optional Paperless-ngx integration. The Finder workflow remains available without either optional integration.
 
 ## Features
 
-- Reads a selected PDF directly from Finder.
-- Prioritizes SEPA/EPC payment QR codes when available.
-- Falls back to PDF text extraction and OCR, with heuristics for payee, IBAN, gross amount, and payment reference.
-- Lets you review and edit the four payment fields, including choosing detected alternatives.
-- Supports password-protected PDFs using Apple's PDFKit. Optionally saves a successfully used password in **macOS Keychain** for later use.
-- Sends a prefilled transfer draft to simplebanking's `simplesend` interface using a local JSON handoff. No clipboard paste is required.
-- Checks whether simplebanking is running before launching it, avoiding an unnecessary application reopen and its additional transactions window.
-- Offers a copy-to-clipboard fallback.
+- Read a selected PDF directly from Finder.
+- Search invoices in a self-hosted Paperless-ngx instance (optional).
+- Browse PDF attachments in Apple Mail's combined inbox (optional); load older messages on demand.
+- Prioritize valid SEPA/EPC payment QR codes when available.
+- Fall back to PDF text extraction and OCR, with heuristics for payee, checksum-validated IBAN, amount, and payment reference.
+- Review and edit the four payment fields and choose detected alternatives.
+- Unlock password-protected PDFs using Apple's PDFKit. Optionally save a successfully used password in **macOS Keychain** for reuse.
+- Send an atomic local JSON transfer draft to simplebanking / simplesend, without clipboard-based handoff.
+- Launch simplebanking only when necessary, avoiding an unnecessary reopen event when it is already running.
+- Copy payment details to the clipboard as an alternative.
 
 ## Requirements
 
@@ -35,6 +34,8 @@ The original Finder-based workflow remains available without Paperless-ngx.
 - Node.js and npm to build the extension
 - Swift / Xcode Command Line Tools for the local PDF helper
 - [simplebanking](https://github.com/klotzbrocken/simplebanking) with working simplesend support and permission to accept external transfer drafts
+- **Optional:** Apple Mail, configured with at least one mail account, for the Mail command
+- **Optional:** Paperless-ngx and an API token for the Paperless command
 
 ## Installation
 
@@ -46,7 +47,7 @@ npm install
 npm run dev
 ```
 
-For a production build, use `npm run build`. Configure the extension in Raycast and optionally assign a keyboard shortcut.
+For a production build, run `npm run build`. Configure optional command preferences in Raycast and assign keyboard shortcuts if desired.
 
 In simplebanking, enable the setting for accepting external transfer drafts. Depending on the installed version, the preference may also be enabled with:
 
@@ -56,38 +57,48 @@ defaults write tech.yaxi.simplebanking mcpDraftsEnabled -bool true
 
 Restart simplebanking after changing this preference. A working simplesend entitlement is required.
 
-## Usage
+## Usage: Finder
 
 1. Select a PDF invoice in Finder.
 2. Run **Rechnung überweisen** in Raycast.
-3. If the PDF is encrypted, enter its password. You can choose to remember the password in macOS Keychain.
-4. Review **Empfänger** (payee), **IBAN**, **Betrag** (amount), and **Verwendungszweck** (payment reference). Edit values or choose detected alternatives if needed.
-5. Choose **In simplesend öffnen**. The extension writes a transfer draft and simplebanking opens the prefilled transfer interface.
-6. Select the debit account, verify all details, and explicitly approve the transfer in simplebanking.
+3. If prompted, unlock the PDF with its password.
+4. Review **Empfänger** (payee), **IBAN**, **Betrag** (amount), and **Verwendungszweck** (payment reference); edit values or choose alternatives as needed.
+5. Optionally choose **In simplesend öffnen** to create a transfer draft.
+6. Select the debit account, verify all details, and explicitly authorize the transfer **in simplebanking**.
 
 The extension **never executes a bank transfer by itself**.
+
+## Usage: Apple Mail
+
+1. Configure an account in Apple's **Mail** application and allow the macOS automation permission when prompted.
+2. Run **Rechnung aus Mail** in Raycast.
+3. The command initially scans the **latest 30 messages** in the combined inbox across Mail accounts and lists PDF attachments individually. Use **Weitere 100 E-Mails laden** to scan older messages in batches.
+4. Select the desired PDF. The command re-locates the message by account, mailbox, and message ID, then checks the attachment position and filename before saving a temporary copy.
+5. Review and, if necessary, correct the extracted payment details.
+6. Optionally send a draft to simplesend; final authorization takes place in simplebanking.
+
+The search in Raycast filters **already loaded** PDF results; it does not search the entire Mail archive. The command currently targets the combined inbox, not arbitrary Mail folders. Loading speed depends on mailbox size and macOS automation performance.
+
+Attachments are copied to temporary local files for processing; original Mail messages and attachments are not intentionally modified. The implementation does not deliberately mark messages as read, delete them, or send mail. Temporary copies are cleaned up after processing, with an additional cleanup mechanism for older interrupted sessions. Password-protected PDFs may need to remain temporarily available until unlocking completes.
 
 ## Paperless-ngx setup and usage
 
 Paperless-ngx integration is optional and independent of other Raycast Paperless extensions.
 
-1. Configure the **Paperless-ngx Server URL** and **Paperless-ngx API Token** in the preferences for the **Rechnung aus Paperless** command.
-2. In Paperless-ngx, classify invoices using the document type `Rechnung`.
+1. Configure **Paperless-ngx Server URL** and **Paperless-ngx API Token** in the preferences for **Rechnung aus Paperless**.
+2. Classify invoices in Paperless-ngx using the document type `Rechnung`.
 3. Run **Rechnung aus Paperless** in Raycast.
 4. Search for and select an invoice.
-5. Review the extracted payee, IBAN, amount, and payment reference.
-6. Choose **In simplesend öffnen** to prepare the transfer in simplebanking.
-7. Verify and authorize the transfer in simplebanking.
+5. Review and edit the extracted payee, IBAN, amount, and payment reference.
+6. Optionally choose **In simplesend öffnen** to prepare the transfer; verify and authorize it in simplebanking.
 
-The document type is resolved dynamically through the Paperless-ngx API; no document type ID needs to be configured.
-
-Downloaded PDFs are processed locally as temporary files. The extension removes temporary files after processing and performs cleanup of older temporary files from interrupted sessions. Original documents in Paperless-ngx are not modified.
+The document type is resolved dynamically through the Paperless-ngx API; no document type ID needs to be configured. Downloaded PDFs are processed locally as temporary files and cleaned up after processing, with cleanup of older files from interrupted sessions. Original Paperless documents are not modified.
 
 Paperless credentials are configured in Raycast preferences, not embedded in the source code. The API token uses a password-type preference.
 
 ## Password-protected PDFs
 
-The PDF is unlocked for reading without modifying the original file. A password can be stored in the macOS Keychain and reused automatically. The saved password is tried for **other encrypted PDFs as well**; it is not currently restricted to a particular pharmacy or sender. If it does not work, Raycast prompts for another password. Passwords are not placed in transfer-draft JSON or the source repository.
+The PDF is unlocked for reading without modifying the original file. A password can be stored in the macOS Keychain and reused automatically. The saved password is tried for **other encrypted PDFs as well**; it is not currently restricted to a particular sender. If it does not work, Raycast prompts for another password. Passwords are not placed in transfer-draft JSON or the source repository.
 
 Each Mac must have access to the relevant Keychain entry; cloning the repository alone does not transfer passwords.
 
@@ -99,22 +110,23 @@ The extension creates an atomic JSON draft in:
 ~/Library/Application Support/simplebanking/transfer-drafts/
 ```
 
-The draft includes payee name, validated IBAN, amount in EUR, payment reference, creation time, and a short expiration time. The simplebanking filesystem watcher detects the file and opens simplesend. When simplebanking is already running, the extension does **not** call `open -a` again. If simplebanking is not running, it launches the app.
+The draft contains the payee name, validated IBAN, EUR amount, payment reference, creation time, and short expiration time. The simplebanking filesystem watcher detects the draft and opens simplesend. When simplebanking is already running, the extension does **not** call `open -a` again. Otherwise, it launches the app.
 
-Depending on the installed simplebanking version, launching a stopped app may still show its main window.
+Depending on the installed simplebanking version, launching a stopped app may also show its main window.
 
 ## Project layout
 
 ```text
 rechnung-ueberweisen/
 ├── assets/
-│   ├── extract.swift          # PDFKit, Vision, PDF unlocking, Keychain
+│   ├── extract.swift                 # PDFKit, Vision, PDF unlocking, Keychain
 │   ├── command-icon.png
 │   └── transfer-icon.png
 ├── src/
-│   ├── extract.ts             # Payment-data parsing and candidate selection
-│   ├── rechnung-ueberweisen.tsx  # Invoice form and simplesend handoff
-│   └── rechnung-aus-paperless.tsx  # Paperless-ngx search and download
+│   ├── extract.ts                    # Payment-data parsing and candidate ranking
+│   ├── rechnung-ueberweisen.tsx      # Invoice form and simplesend handoff
+│   ├── rechnung-aus-paperless.tsx    # Paperless-ngx search and download
+│   └── rechnung-aus-mail.tsx         # Apple Mail PDF selection and download
 ├── package.json
 ├── package-lock.json
 ├── raycast-env.d.ts
@@ -123,9 +135,11 @@ rechnung-ueberweisen/
 
 ## Limitations and safety
 
-- PDF extraction is heuristic. Always verify payee, IBAN, amount, and reference before authorizing a payment.
+- PDF extraction is heuristic. Always verify the payee, IBAN, amount, and payment reference before authorizing a payment.
 - The debit account is selected inside simplesend, not by this extension.
-- This extension is a local convenience tool, not a payment service or a substitute for bank verification.
+- Mail listing initially scans only recent inbox messages; older messages require explicit loading.
+- An attachment's PDF filename alone is not treated as a unique identifier.
+- The extension is a local convenience tool, not a payment service or a substitute for bank verification.
 - The current UI is German-only.
 
 ## Contributing

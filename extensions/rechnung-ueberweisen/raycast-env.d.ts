@@ -22,6 +22,8 @@ declare namespace Preferences {
   /** Paperless-ngx API Token - API-Token aus dem Paperless-Profil */
   "paperlessToken": string
 }
+  /** Preferences accessible in the `rechnung-aus-mail` command */
+  export type RechnungAusMail = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -29,5 +31,7 @@ declare namespace Arguments {
   export type RechnungUeberweisen = {}
   /** Arguments passed to the `rechnung-aus-paperless` command */
   export type RechnungAusPaperless = {}
+  /** Arguments passed to the `rechnung-aus-mail` command */
+  export type RechnungAusMail = {}
 }
 

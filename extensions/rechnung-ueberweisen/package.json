@@ -3,7 +3,7 @@
   "title": "Rechnung überweisen",
   "description": "Zahlungsdaten lokal aus einer im Finder ausgewählten PDF-Rechnung erkennen und prüfen",
   "icon": "transfer-icon.png",
-  "author": "local",
+  "author": "donleonardo",
   "license": "MIT",
   "commands": [
     {
@@ -36,6 +36,14 @@
           "required": true
         }
       ]
+    },
+    {
+      "name": "rechnung-aus-mail",
+      "title": "Rechnung aus Mail",
+      "subtitle": "PDF-Anhänge aus Apple Mail",
+      "description": "PDF-Rechnungen aus den gemeinsamen Posteingängen von Apple Mail analysieren",
+      "mode": "view",
+      "icon": "transfer-icon.png"
     }
   ],
   "scripts": {

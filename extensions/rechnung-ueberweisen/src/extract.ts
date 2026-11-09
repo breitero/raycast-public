@@ -17,7 +17,7 @@ function uniq(xs: Candidate[]): Candidate[] {
   return sorted.filter((c) => { const k = c.value.trim().toLocaleLowerCase("de"); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 function money(s: string): string | undefined {
-  const clean = s.replace(/[€\s]/g, "");
+  const clean = s.replace(/EUR/gi, "").replace(/[€\s]/g, "");
   let normalized: string;
   if (clean.includes(",")) normalized = clean.replace(/\./g, "").replace(",", ".");
   else normalized = clean;
@@ -45,9 +45,11 @@ export function parseInvoice(text: string, qrCodes: string[] = []): Invoice {
   const lines = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   const recipients: Candidate[] = [], ibans: Candidate[] = [], amounts: Candidate[] = [], purposes: Candidate[] = [];
   const numberFields: Record<string, string> = {};
-  const amountPattern = /\b(?:\d{1,3}(?:\.\d{3})+|\d+)\s*,\s*\d{2}\s*€/g;
+  // Currency marker required: prevents treating dates, IDs or percentages as amounts.
+  // Supports "267,40 €", "267,40 EUR" and "EUR 267,40".
+  const amountPattern = /(?:\bEUR\s*(?:\d{1,3}(?:\.\d{3})+|\d+)\s*,\s*\d{2}\b|\b(?:\d{1,3}(?:\.\d{3})+|\d+)\s*,\s*\d{2}\s*(?:€|EUR\b))/gi;
   const totalWords = /brutto\s*(?:summe|betrag)?|gesamt\s*(?:betrag|summe)|rechnungs\s*(?:betrag|summe)|end\s*(?:betrag|summe)|zahl\s*(?:betrag|bar)|zu\s*zahlen|überweisungsbetrag/i;
-  const negativeWords = /netto|mehrwertsteuer|umsatzsteuer|\bmwst\b|\bust\b|teilsumme|einzelpreis|kundenpreis/i;
+  const negativeWords = /netto|mehrwertsteuer|umsatzsteuer|\bmwst\b|\bust\b|teilsumme|einzelpreis|kundenpreis|alter\s+rechnungsbetrag|nicht\s+verwenden/i;
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n];
     const nearby = lines.slice(Math.max(0, n - 1), Math.min(lines.length, n + 2)).join(" ");
@@ -61,10 +63,11 @@ export function parseInvoice(text: string, qrCodes: string[] = []): Invoice {
       if (!value) continue;
       const prefix = line.slice(0, m.index).trim();
       let score = 40;
-      if (totalWords.test(prefix)) score = 155;
-      else if (negativeWords.test(prefix)) score = 5;
-      else if (totalWords.test(nearby) && !negativeWords.test(line) && !/portokosten|versandkosten|gebühr/i.test(line)) score = 90;
-      else if (negativeWords.test(line)) score = 10;
+      // Negative qualifiers take precedence even if "Rechnungsbetrag" appears.
+      if (negativeWords.test(line)) score = 5;
+      else if (/\bzu\s*zahlen\b/i.test(prefix)) score = 180;
+      else if (totalWords.test(prefix) || /\bbetrag\s*:\s*$/i.test(prefix)) score = 155;
+      else if (totalWords.test(nearby) && !/portokosten|versandkosten|gebühr/i.test(line)) score = 90;
       amounts.push(candidate(value, line.slice(0, 120), score));
     }
     const explicit = line.match(/(?:verwendungs\s*zweck|zahlungs\s*referenz|verwendungs\s*text)\s*[:：]?\s+(.+)$/i);

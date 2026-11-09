@@ -96,15 +96,18 @@ export function InvoiceForm({ sourceFilePath, sourceFilename, deleteOnUnmount = 
   const [savePassword, setSavePassword] = useState(true);
   const [passwordRejected, setPasswordRejected] = useState(false);
 
-  // Nur von dieser Extension erzeugte Paperless-Tempdateien löschen.
+  // Nur von dieser Extension erzeugte Paperless- oder Mail-Tempdateien löschen.
   // Niemals Finder-PDFs anfassen. Nicht beim Unmount löschen: Raycast kann
   // während eines laufenden Swift-Aufrufs die View kurz neu aufbauen.
-  async function cleanupPaperlessPdf(filePath: string) {
+  async function cleanupTemporaryInvoicePdf(filePath: string) {
     if (!deleteOnUnmount || !sourceFilePath || filePath !== sourceFilePath) return;
     const directory = path.dirname(filePath);
-    if (path.dirname(directory) !== os.tmpdir() ||
-        !path.basename(directory).startsWith("raycast-paperless-") ||
-        !/^paperless-\d+\.pdf$/.test(path.basename(filePath))) return;
+    if (path.dirname(directory) !== os.tmpdir()) return;
+    const folder = path.basename(directory);
+    const file = path.basename(filePath);
+    const isPaperless = /^raycast-paperless-[A-Za-z0-9_-]+$/.test(folder) && /^paperless-\d+\.pdf$/.test(file);
+    const isMail = /^raycast-mail-[A-Za-z0-9_-]+$/.test(folder) && /^mail-[0-9a-f-]{36}\.pdf$/.test(file);
+    if (!isPaperless && !isMail) return;
     await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
 
@@ -141,10 +144,10 @@ export function InvoiceForm({ sourceFilePath, sourceFilename, deleteOnUnmount = 
       setPdfPassword("");
       // PDF wird nach erfolgreicher Swift-Auswertung nicht mehr benötigt.
       // Bei Passwortabfrage bleibt sie bis zum erfolgreichen Entsperren erhalten.
-      await cleanupPaperlessPdf(filePath);
+      await cleanupTemporaryInvoicePdf(filePath);
       if (!data.iban.length) await showToast({ style: Toast.Style.Failure, title: "Keine gültige IBAN erkannt", message: "Bitte manuell ergänzen." });
     } catch (error) {
-      await cleanupPaperlessPdf(filePath);
+      await cleanupTemporaryInvoicePdf(filePath);
       await showToast({ style: Toast.Style.Failure, title: "PDF konnte nicht verarbeitet werden", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
